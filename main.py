@@ -2,6 +2,7 @@ from crawler import main as crawl_main
 from report_generator import generate_report
 from services.similarity_service import remove_similar_articles
 from utils.file_utils import get_today_str, load_news_json
+from services.db_service import save_articles_to_db, get_article_count
 
 
 def group_by_section(articles):
@@ -25,6 +26,14 @@ def main():
     print("[2/3] 수집 데이터 로드")
     date_str = get_today_str()
     articles = load_news_json(date_str)
+
+    print("[DB] 뉴스 데이터 저장 시작")
+    saved_count, skipped_count = save_articles_to_db(articles)
+    total_db_count = get_article_count()
+
+    print(f"[DB] 신규 저장: {saved_count}건")
+    print(f"[DB] 중복 스킵: {skipped_count}건")
+    print(f"[DB] 전체 저장 기사 수: {total_db_count}건")
 
     original_count = len(articles)
 
