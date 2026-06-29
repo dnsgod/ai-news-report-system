@@ -96,3 +96,62 @@ def get_article_count():
 
     conn.close()
     return count
+
+def search_articles(keyword="", section="전체", limit=50):
+    init_db()
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    query = """
+        SELECT
+            section,
+            title,
+            press,
+            link,
+            content,
+            crawled_at
+        FROM news_articles
+        WHERE 1=1
+    """
+
+    params = []
+
+    if keyword:
+        query += """
+            AND (
+                title LIKE ?
+                OR content LIKE ?
+                OR press LIKE ?
+            )
+        """
+        like_keyword = f"%{keyword}%"
+        params.extend([like_keyword, like_keyword, like_keyword])
+
+    if section != "전체":
+        query += " AND section = ?"
+        params.append(section)
+
+    query += " ORDER BY created_at DESC LIMIT ?"
+    params.append(limit)
+
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+
+    conn.close()
+
+    articles = []
+
+    for row in rows:
+        articles.append(
+            {
+                "section": row[0],
+                "title": row[1],
+                "press": row[2],
+                "link": row[3],
+                "content": row[4],
+                "crawled_at": row[5],
+            }
+        )
+
+    return articles
