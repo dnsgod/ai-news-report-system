@@ -97,7 +97,14 @@ def get_article_count():
     conn.close()
     return count
 
-def search_articles(keyword="", section="전체", limit=50):
+def search_articles(
+    keyword="",
+    section="전체",
+    press="전체",
+    start_date=None,
+    end_date=None,
+    limit=50,
+):
     init_db()
 
     conn = get_connection()
@@ -132,6 +139,18 @@ def search_articles(keyword="", section="전체", limit=50):
         query += " AND section = ?"
         params.append(section)
 
+    if press != "전체":
+        query += " AND press = ?"
+        params.append(press)
+
+    if start_date:
+        query += " AND substr(crawled_at, 1, 10) >= ?"
+        params.append(str(start_date))
+
+    if end_date:
+        query += " AND substr(crawled_at, 1, 10) <= ?"
+        params.append(str(end_date))
+
     query += " ORDER BY created_at DESC LIMIT ?"
     params.append(limit)
 
@@ -155,3 +174,26 @@ def search_articles(keyword="", section="전체", limit=50):
         )
 
     return articles
+
+def get_press_list():
+    init_db()
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT DISTINCT press
+        FROM news_articles
+        WHERE press IS NOT NULL
+          AND press != ''
+        ORDER BY press
+        """
+    )
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    press_list = [row[0] for row in rows]
+
+    return press_list

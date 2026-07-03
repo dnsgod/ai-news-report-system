@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from services.db_service import search_articles
+from services.db_service import search_articles, get_press_list
 from utils.file_utils import get_today_str
 
 
@@ -36,9 +36,14 @@ def render_article_list(articles):
         section = article.get("section", "기타")
         link = article.get("link", "")
         content = article.get("content", "")
+        crawled_at = article.get("crawled_at", "")
 
         with st.expander(f"[{section}] {title}"):
             st.write(f"**언론사:** {press}")
+
+            if crawled_at:
+                st.write(f"**수집 시각:** {crawled_at}")
+
             st.write(f"**링크:** {link}")
 
             if content:
@@ -99,6 +104,21 @@ def main():
         ["전체", "정치", "경제", "사회", "생활문화", "세계", "IT과학"],
     )
 
+    press_options = ["전체"] + get_press_list()
+
+    search_press = st.selectbox(
+        "언론사",
+        press_options,
+    )
+
+    col_start, col_end = st.columns(2)
+
+    with col_start:
+        start_date = st.date_input("검색 시작일")
+
+    with col_end:
+        end_date = st.date_input("검색 종료일")
+
     search_limit = st.slider(
         "검색 결과 수",
         min_value=5,
@@ -108,18 +128,24 @@ def main():
     )
 
     if st.button("검색"):
-        results = search_articles(
-            keyword=keyword,
-            section=search_section,
-            limit=search_limit,
-        )
-
-        st.write(f"검색 결과: {len(results)}건")
-
-        if not results:
-            st.info("검색 결과가 없습니다.")
+        if start_date > end_date:
+            st.error("검색 시작일은 종료일보다 늦을 수 없습니다.")
         else:
-            render_article_list(results)
+            results = search_articles(
+                keyword=keyword,
+                section=search_section,
+                press=search_press,
+                start_date=start_date,
+                end_date=end_date,
+                limit=search_limit,
+            )
+
+            st.write(f"검색 결과: {len(results)}건")
+
+            if not results:
+                st.info("검색 결과가 없습니다.")
+            else:
+                render_article_list(results)
 
     st.divider()
 
