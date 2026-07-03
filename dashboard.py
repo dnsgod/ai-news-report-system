@@ -4,8 +4,14 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from services.db_service import search_articles, get_press_list
 from utils.file_utils import get_today_str
+from services.db_service import (
+    search_articles,
+    get_press_list,
+    get_press_statistics,
+    get_section_statistics,
+    get_daily_statistics,
+)
 
 
 def load_today_news():
@@ -85,19 +91,51 @@ def main():
 
     st.divider()
 
-    st.subheader("📌 섹션별 기사 수")
+    st.subheader("📊 누적 뉴스 통계")
 
-    section_counts = df["section"].value_counts()
-    st.bar_chart(section_counts)
+    press_stats = get_press_statistics(limit=10)
+    section_stats = get_section_statistics()
+    daily_stats = get_daily_statistics(limit=14)
 
-    st.divider()
+    col_press, col_section = st.columns(2)
 
-    st.subheader("🔎 뉴스 검색")
+    with col_press:
+        st.write("**언론사별 기사 수 TOP 10**")
 
-    keyword = st.text_input(
-        "검색어 입력",
-        placeholder="예: 반도체, AI, 환율, 삼성전자",
-    )
+        if press_stats:
+            press_df = pd.DataFrame(press_stats)
+            st.bar_chart(
+                press_df,
+                x="press",
+                y="count",
+            )
+        else:
+            st.info("언론사 통계 데이터가 없습니다.")
+
+    with col_section:
+        st.write("**섹션별 누적 기사 수**")
+
+        if section_stats:
+            section_df = pd.DataFrame(section_stats)
+            st.bar_chart(
+                section_df,
+                x="section",
+                y="count",
+            )
+        else:
+            st.info("섹션 통계 데이터가 없습니다.")
+
+    st.write("**날짜별 수집 기사 수**")
+
+    if daily_stats:
+        daily_df = pd.DataFrame(daily_stats)
+        st.line_chart(
+            daily_df,
+            x="date",
+            y="count",
+        )
+    else:
+        st.info("날짜별 통계 데이터가 없습니다.")
 
     search_section = st.selectbox(
         "검색 섹션",

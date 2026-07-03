@@ -197,3 +197,95 @@ def get_press_list():
     press_list = [row[0] for row in rows]
 
     return press_list
+
+def get_press_statistics(limit=10):
+    init_db()
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT press, COUNT(*) AS count
+        FROM news_articles
+        WHERE press IS NOT NULL
+          AND press != ''
+        GROUP BY press
+        ORDER BY count DESC
+        LIMIT ?
+        """,
+        (limit,),
+    )
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [
+        {
+            "press": row[0],
+            "count": row[1],
+        }
+        for row in rows
+    ]
+
+
+def get_section_statistics():
+    init_db()
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT section, COUNT(*) AS count
+        FROM news_articles
+        WHERE section IS NOT NULL
+          AND section != ''
+        GROUP BY section
+        ORDER BY count DESC
+        """
+    )
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [
+        {
+            "section": row[0],
+            "count": row[1],
+        }
+        for row in rows
+    ]
+
+
+def get_daily_statistics(limit=14):
+    init_db()
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT substr(crawled_at, 1, 10) AS date, COUNT(*) AS count
+        FROM news_articles
+        WHERE crawled_at IS NOT NULL
+          AND crawled_at != ''
+        GROUP BY substr(crawled_at, 1, 10)
+        ORDER BY date DESC
+        LIMIT ?
+        """,
+        (limit,),
+    )
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    rows = list(reversed(rows))
+
+    return [
+        {
+            "date": row[0],
+            "count": row[1],
+        }
+        for row in rows
+    ]
