@@ -93,6 +93,10 @@ def main():
 
     st.subheader("📊 누적 뉴스 통계")
 
+    keyword = st.text_input(
+        "검색어 입력",
+        placeholder="예: 반도체, AI, 환율, 삼성전자",
+    )
     press_stats = get_press_statistics(limit=10)
     section_stats = get_section_statistics()
     daily_stats = get_daily_statistics(limit=14)
