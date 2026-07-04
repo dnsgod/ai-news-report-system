@@ -2,14 +2,14 @@ import sqlite3
 from pathlib import Path
 
 from config import DB_PATH
+from services.sentiment_service import analyze_sentiment
+from services.tag_service import assign_tags
 
 
 def get_connection():
     db_path = Path(DB_PATH)
     db_path.parent.mkdir(parents=True, exist_ok=True)
-
-    conn = sqlite3.connect(db_path)
-    return conn
+    return sqlite3.connect(db_path)
 
 
 def init_db():
@@ -32,6 +32,15 @@ def init_db():
         """
     )
 
+    cursor.execute("PRAGMA table_info(news_articles)")
+    columns = [row[1] for row in cursor.fetchall()]
+
+    if "sentiment" not in columns:
+        cursor.execute("ALTER TABLE news_articles ADD COLUMN sentiment TEXT")
+
+    if "tags" not in columns:
+        cursor.execute("ALTER TABLE news_articles ADD COLUMN tags TEXT")
+
     conn.commit()
     conn.close()
 
@@ -47,6 +56,13 @@ def save_articles_to_db(articles):
 
     for article in articles:
         try:
+            title = article.get("title", "")
+            content = article.get("content", "")
+
+            sentiment = analyze_sentiment(title, content)
+            tags = assign_tags(title, content)
+            tag_text = ",".join(tags)
+
             cursor.execute(
                 """
                 INSERT OR IGNORE INTO news_articles (
@@ -56,18 +72,22 @@ def save_articles_to_db(articles):
                     link,
                     content,
                     content_length,
-                    crawled_at
+                    crawled_at,
+                    sentiment,
+                    tags
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     article.get("section", ""),
-                    article.get("title", ""),
+                    title,
                     article.get("press", ""),
                     article.get("link", ""),
-                    article.get("content", ""),
-                    article.get("content_length", len(article.get("content", ""))),
+                    content,
+                    article.get("content_length", len(content)),
                     article.get("crawled_at", ""),
+                    sentiment,
+                    tag_text,
                 ),
             )
 
@@ -97,6 +117,7 @@ def get_article_count():
     conn.close()
     return count
 
+
 def search_articles(
     keyword="",
     section="전체",
@@ -117,7 +138,9 @@ def search_articles(
             press,
             link,
             content,
-            crawled_at
+            crawled_at,
+            sentiment,
+            tags
         FROM news_articles
         WHERE 1=1
     """
@@ -130,10 +153,18 @@ def search_articles(
                 title LIKE ?
                 OR content LIKE ?
                 OR press LIKE ?
+                OR tags LIKE ?
+                OR sentiment LIKE ?
             )
         """
         like_keyword = f"%{keyword}%"
-        params.extend([like_keyword, like_keyword, like_keyword])
+        params.extend([
+            like_keyword,
+            like_keyword,
+            like_keyword,
+            like_keyword,
+            like_keyword,
+        ])
 
     if section != "전체":
         query += " AND section = ?"
@@ -159,21 +190,20 @@ def search_articles(
 
     conn.close()
 
-    articles = []
+    return [
+        {
+            "section": row[0],
+            "title": row[1],
+            "press": row[2],
+            "link": row[3],
+            "content": row[4],
+            "crawled_at": row[5],
+            "sentiment": row[6],
+            "tags": row[7],
+        }
+        for row in rows
+    ]
 
-    for row in rows:
-        articles.append(
-            {
-                "section": row[0],
-                "title": row[1],
-                "press": row[2],
-                "link": row[3],
-                "content": row[4],
-                "crawled_at": row[5],
-            }
-        )
-
-    return articles
 
 def get_press_list():
     init_db()
@@ -194,9 +224,8 @@ def get_press_list():
     rows = cursor.fetchall()
     conn.close()
 
-    press_list = [row[0] for row in rows]
+    return [row[0] for row in rows]
 
-    return press_list
 
 def get_press_statistics(limit=10):
     init_db()
@@ -220,13 +249,7 @@ def get_press_statistics(limit=10):
     rows = cursor.fetchall()
     conn.close()
 
-    return [
-        {
-            "press": row[0],
-            "count": row[1],
-        }
-        for row in rows
-    ]
+    return [{"press": row[0], "count": row[1]} for row in rows]
 
 
 def get_section_statistics():
@@ -249,13 +272,7 @@ def get_section_statistics():
     rows = cursor.fetchall()
     conn.close()
 
-    return [
-        {
-            "section": row[0],
-            "count": row[1],
-        }
-        for row in rows
-    ]
+    return [{"section": row[0], "count": row[1]} for row in rows]
 
 
 def get_daily_statistics(limit=14):
@@ -282,10 +299,4 @@ def get_daily_statistics(limit=14):
 
     rows = list(reversed(rows))
 
-    return [
-        {
-            "date": row[0],
-            "count": row[1],
-        }
-        for row in rows
-    ]
+    return [{"date": row[0], "count": row[1]} for row in rows]

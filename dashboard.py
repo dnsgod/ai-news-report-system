@@ -15,12 +15,6 @@ from services.db_service import (
 
 
 def load_today_news():
-    """
-    오늘 날짜의 JSON 뉴스 파일을 읽어온다.
-    파일 위치:
-    data/raw/naver_news_YYYYMMDD.json
-    """
-
     date_str = get_today_str()
     path = Path("data/raw") / f"naver_news_{date_str}.json"
 
@@ -32,10 +26,6 @@ def load_today_news():
 
 
 def render_article_list(articles):
-    """
-    기사 목록을 Streamlit 화면에 출력한다.
-    """
-
     for article in articles:
         title = article.get("title", "제목 없음")
         press = article.get("press", "언론사 미확인")
@@ -43,12 +33,20 @@ def render_article_list(articles):
         link = article.get("link", "")
         content = article.get("content", "")
         crawled_at = article.get("crawled_at", "")
+        sentiment = article.get("sentiment", "")
+        tags = article.get("tags", "")
 
         with st.expander(f"[{section}] {title}"):
             st.write(f"**언론사:** {press}")
 
             if crawled_at:
                 st.write(f"**수집 시각:** {crawled_at}")
+
+            if sentiment:
+                st.write(f"**분위기:** {sentiment}")
+
+            if tags:
+                st.write(f"**태그:** {tags}")
 
             st.write(f"**링크:** {link}")
 
@@ -93,10 +91,6 @@ def main():
 
     st.subheader("📊 누적 뉴스 통계")
 
-    keyword = st.text_input(
-        "검색어 입력",
-        placeholder="예: 반도체, AI, 환율, 삼성전자",
-    )
     press_stats = get_press_statistics(limit=10)
     section_stats = get_section_statistics()
     daily_stats = get_daily_statistics(limit=14)
@@ -140,6 +134,15 @@ def main():
         )
     else:
         st.info("날짜별 통계 데이터가 없습니다.")
+
+    st.divider()
+
+    st.subheader("🔎 뉴스 검색")
+
+    keyword = st.text_input(
+        "검색어 입력",
+        placeholder="예: 반도체, AI, 환율, 삼성전자, 부정, 긍정",
+    )
 
     search_section = st.selectbox(
         "검색 섹션",
