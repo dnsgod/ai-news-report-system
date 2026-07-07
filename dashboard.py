@@ -1,4 +1,5 @@
 import json
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -11,10 +12,11 @@ from services.db_service import (
     get_press_statistics,
     get_section_statistics,
     get_daily_statistics,
+    get_tag_list,
 )
 
 
-def load_today_news():
+def load_today_news_json():
     date_str = get_today_str()
     path = Path("data/raw") / f"naver_news_{date_str}.json"
 
@@ -44,9 +46,13 @@ def render_article_list(articles):
 
             if sentiment:
                 st.write(f"**분위기:** {sentiment}")
+            else:
+                st.write("**분위기:** 미분석")
 
             if tags:
                 st.write(f"**태그:** {tags}")
+            else:
+                st.write("**태그:** 미분류")
 
             st.write(f"**링크:** {link}")
 
@@ -67,25 +73,25 @@ def main():
 
     st.title("📰 AI 뉴스 리포트 대시보드")
 
-    articles, path = load_today_news()
+    json_articles, path = load_today_news_json()
 
-    if not articles:
-        st.warning(f"오늘 뉴스 파일을 찾지 못했습니다: {path}")
+    if not json_articles:
+        st.warning(f"오늘 뉴스 JSON 파일을 찾지 못했습니다: {path}")
         st.info("먼저 아래 명령어를 실행하세요.")
         st.code("python main.py")
         return
 
-    df = pd.DataFrame(articles)
+    df = pd.DataFrame(json_articles)
 
-    st.caption(f"데이터 파일: {path}")
+    st.caption(f"오늘 JSON 데이터 파일: {path}")
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.metric("수집 기사 수", len(df))
+        st.metric("오늘 수집 기사 수", len(df))
 
     with col2:
-        st.metric("섹션 수", df["section"].nunique())
+        st.metric("오늘 섹션 수", df["section"].nunique())
 
     st.divider()
 
@@ -102,11 +108,7 @@ def main():
 
         if press_stats:
             press_df = pd.DataFrame(press_stats)
-            st.bar_chart(
-                press_df,
-                x="press",
-                y="count",
-            )
+            st.bar_chart(press_df, x="press", y="count")
         else:
             st.info("언론사 통계 데이터가 없습니다.")
 
@@ -115,11 +117,7 @@ def main():
 
         if section_stats:
             section_df = pd.DataFrame(section_stats)
-            st.bar_chart(
-                section_df,
-                x="section",
-                y="count",
-            )
+            st.bar_chart(section_df, x="section", y="count")
         else:
             st.info("섹션 통계 데이터가 없습니다.")
 
@@ -127,11 +125,7 @@ def main():
 
     if daily_stats:
         daily_df = pd.DataFrame(daily_stats)
-        st.line_chart(
-            daily_df,
-            x="date",
-            y="count",
-        )
+        st.line_chart(daily_df, x="date", y="count")
     else:
         st.info("날짜별 통계 데이터가 없습니다.")
 
@@ -141,7 +135,7 @@ def main():
 
     keyword = st.text_input(
         "검색어 입력",
-        placeholder="예: 반도체, AI, 환율, 삼성전자, 부정, 긍정",
+        placeholder="예: 반도체, AI, 환율, 삼성전자",
     )
 
     search_section = st.selectbox(
@@ -154,6 +148,18 @@ def main():
     search_press = st.selectbox(
         "언론사",
         press_options,
+    )
+
+    tag_options = ["전체"] + get_tag_list()
+
+    search_tag = st.selectbox(
+        "태그",
+        tag_options,
+    )
+
+    search_sentiment = st.selectbox(
+        "분위기",
+        ["전체", "긍정", "중립", "부정"],
     )
 
     col_start, col_end = st.columns(2)
@@ -180,6 +186,8 @@ def main():
                 keyword=keyword,
                 section=search_section,
                 press=search_press,
+                tag=search_tag,
+                sentiment=search_sentiment,
                 start_date=start_date,
                 end_date=end_date,
                 limit=search_limit,
@@ -196,22 +204,33 @@ def main():
 
     st.subheader("🗂 오늘 뉴스 보기")
 
-    sections = ["전체"] + sorted(df["section"].dropna().unique().tolist())
+    today = date.today()
 
-    selected_section = st.selectbox(
+    today_section = st.selectbox(
         "오늘 뉴스 섹션 선택",
-        sections,
+        ["전체", "정치", "경제", "사회", "생활문화", "세계", "IT과학"],
     )
 
-    if selected_section != "전체":
-        filtered_df = df[df["section"] == selected_section]
+    today_articles = search_articles(
+        keyword="",
+        section=today_section,
+        press="전체",
+        tag="전체",
+        sentiment="전체",
+        start_date=today,
+        end_date=today,
+        limit=100,
+    )
+
+    st.write(f"표시 기사 수: {len(today_articles)}건")
+
+    if not today_articles:
+        st.info(
+            "오늘 날짜로 DB에 저장된 뉴스가 없습니다. "
+            "python main.py를 실행해서 SQLite 저장까지 완료했는지 확인하세요."
+        )
     else:
-        filtered_df = df
-
-    st.write(f"표시 기사 수: {len(filtered_df)}건")
-
-    today_articles = filtered_df.to_dict(orient="records")
-    render_article_list(today_articles)
+        render_article_list(today_articles)
 
 
 if __name__ == "__main__":

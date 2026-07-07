@@ -122,6 +122,8 @@ def search_articles(
     keyword="",
     section="전체",
     press="전체",
+    tag="전체",
+    sentiment="전체",
     start_date=None,
     end_date=None,
     limit=50,
@@ -173,6 +175,14 @@ def search_articles(
     if press != "전체":
         query += " AND press = ?"
         params.append(press)
+
+    if tag != "전체":
+        query += " AND tags LIKE ?"
+        params.append(f"%{tag}%")
+
+    if sentiment != "전체":
+        query += " AND sentiment = ?"
+        params.append(sentiment)
 
     if start_date:
         query += " AND substr(crawled_at, 1, 10) >= ?"
@@ -300,3 +310,34 @@ def get_daily_statistics(limit=14):
     rows = list(reversed(rows))
 
     return [{"date": row[0], "count": row[1]} for row in rows]
+
+def get_tag_list():
+    init_db()
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT tags
+        FROM news_articles
+        WHERE tags IS NOT NULL
+          AND tags != ''
+        """
+    )
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    tag_set = set()
+
+    for row in rows:
+        tag_text = row[0]
+
+        for tag in tag_text.split(","):
+            tag = tag.strip()
+
+            if tag:
+                tag_set.add(tag)
+
+    return sorted(tag_set)
