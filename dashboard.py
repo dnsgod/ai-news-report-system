@@ -14,6 +14,7 @@ from services.db_service import (
     get_daily_statistics,
     get_tag_list,
 )
+from services.rag_service import answer_news_question
 
 
 def load_today_news_json():
@@ -128,6 +129,40 @@ def main():
         st.line_chart(daily_df, x="date", y="count")
     else:
         st.info("날짜별 통계 데이터가 없습니다.")
+
+    st.divider()
+
+    st.subheader("🤖 AI 뉴스 비서")
+
+    question = st.text_input(
+        "뉴스에 대해 질문해보세요",
+        placeholder="예: 반도체 뉴스 요약해줘",
+    )
+
+    rag_limit = st.slider(
+        "AI가 참고할 기사 수",
+        min_value=3,
+        max_value=10,
+        value=5,
+        step=1,
+    )
+
+    if st.button("AI에게 질문하기"):
+        if not question.strip():
+            st.warning("질문을 입력해주세요.")
+        else:
+            with st.spinner("관련 뉴스를 찾고 답변을 생성하는 중입니다..."):
+                result = answer_news_question(
+                    question=question,
+                    limit=rag_limit,
+                )
+
+            st.write("### 답변")
+            st.write(result["answer"])
+
+            if result["articles"]:
+                st.write("### 참고 기사")
+                render_article_list(result["articles"])
 
     st.divider()
 
