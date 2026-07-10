@@ -5,48 +5,96 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from utils.file_utils import get_today_str
 from services.db_service import (
-    search_articles,
+    get_daily_statistics,
     get_press_list,
     get_press_statistics,
     get_section_statistics,
-    get_daily_statistics,
     get_tag_list,
+    search_articles,
 )
 from services.rag_service import answer_news_question
+from utils.file_utils import get_today_str
 
 
 def load_today_news_json():
+    """
+    오늘 날짜의 원본 JSON 뉴스 파일을 읽는다.
+    """
+
     date_str = get_today_str()
     path = Path("data/raw") / f"naver_news_{date_str}.json"
 
     if not path.exists():
         return [], path
 
-    with path.open("r", encoding="utf-8") as f:
-        return json.load(f), path
+    with path.open(
+        "r",
+        encoding="utf-8",
+    ) as file:
+        return json.load(file), path
 
 
-def render_article_list(articles):
+def render_article_list(
+    articles,
+    show_relevance=False,
+):
+    """
+    기사 목록을 접었다 펼 수 있는 형태로 출력한다.
+    """
+
     for article in articles:
-        title = article.get("title", "제목 없음")
-        press = article.get("press", "언론사 미확인")
-        section = article.get("section", "기타")
-        link = article.get("link", "")
-        content = article.get("content", "")
-        crawled_at = article.get("crawled_at", "")
-        sentiment = article.get("sentiment", "")
-        tags = article.get("tags", "")
+        title = article.get(
+            "title",
+            "제목 없음",
+        )
+        press = article.get(
+            "press",
+            "언론사 미확인",
+        )
+        section = article.get(
+            "section",
+            "기타",
+        )
+        link = article.get(
+            "link",
+            "",
+        )
+        content = article.get(
+            "content",
+            "",
+        )
+        crawled_at = article.get(
+            "crawled_at",
+            "",
+        )
+        sentiment = article.get(
+            "sentiment",
+            "",
+        )
+        tags = article.get(
+            "tags",
+            "",
+        )
+        relevance_score = article.get(
+            "relevance_score",
+            0,
+        )
 
-        with st.expander(f"[{section}] {title}"):
+        with st.expander(
+            f"[{section}] {title}"
+        ):
             st.write(f"**언론사:** {press}")
 
             if crawled_at:
-                st.write(f"**수집 시각:** {crawled_at}")
+                st.write(
+                    f"**수집 시각:** {crawled_at}"
+                )
 
             if sentiment:
-                st.write(f"**분위기:** {sentiment}")
+                st.write(
+                    f"**분위기:** {sentiment}"
+                )
             else:
                 st.write("**분위기:** 미분석")
 
@@ -55,88 +103,125 @@ def render_article_list(articles):
             else:
                 st.write("**태그:** 미분류")
 
-            st.write(f"**링크:** {link}")
+            if show_relevance:
+                st.write(
+                    f"**질문 관련도 점수:** "
+                    f"{relevance_score}"
+                )
+
+            if link:
+                st.link_button(
+                    "원문 기사 열기",
+                    link,
+                )
 
             if content:
-                preview = content[:700].replace("\n", " ")
+                preview = content[:700].replace(
+                    "\n",
+                    " ",
+                )
+
                 st.write("**본문 미리보기**")
                 st.write(preview + "...")
             else:
                 st.write("본문이 없습니다.")
 
 
-def main():
-    st.set_page_config(
-        page_title="AI 뉴스 리포트",
-        page_icon="📰",
-        layout="wide",
-    )
-
-    st.title("📰 AI 뉴스 리포트 대시보드")
-
-    json_articles, path = load_today_news_json()
-
-    if not json_articles:
-        st.warning(f"오늘 뉴스 JSON 파일을 찾지 못했습니다: {path}")
-        st.info("먼저 아래 명령어를 실행하세요.")
-        st.code("python main.py")
-        return
-
-    df = pd.DataFrame(json_articles)
-
-    st.caption(f"오늘 JSON 데이터 파일: {path}")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.metric("오늘 수집 기사 수", len(df))
-
-    with col2:
-        st.metric("오늘 섹션 수", df["section"].nunique())
-
-    st.divider()
+def render_statistics():
+    """
+    SQLite에 누적된 뉴스 통계를 출력한다.
+    """
 
     st.subheader("📊 누적 뉴스 통계")
 
-    press_stats = get_press_statistics(limit=10)
+    press_stats = get_press_statistics(
+        limit=10,
+    )
     section_stats = get_section_statistics()
-    daily_stats = get_daily_statistics(limit=14)
+    daily_stats = get_daily_statistics(
+        limit=14,
+    )
 
     col_press, col_section = st.columns(2)
 
     with col_press:
-        st.write("**언론사별 기사 수 TOP 10**")
+        st.write(
+            "**언론사별 기사 수 TOP 10**"
+        )
 
         if press_stats:
-            press_df = pd.DataFrame(press_stats)
-            st.bar_chart(press_df, x="press", y="count")
+            press_df = pd.DataFrame(
+                press_stats
+            )
+
+            st.bar_chart(
+                press_df,
+                x="press",
+                y="count",
+            )
         else:
-            st.info("언론사 통계 데이터가 없습니다.")
+            st.info(
+                "언론사 통계 데이터가 없습니다."
+            )
 
     with col_section:
-        st.write("**섹션별 누적 기사 수**")
+        st.write(
+            "**섹션별 누적 기사 수**"
+        )
 
         if section_stats:
-            section_df = pd.DataFrame(section_stats)
-            st.bar_chart(section_df, x="section", y="count")
+            section_df = pd.DataFrame(
+                section_stats
+            )
+
+            st.bar_chart(
+                section_df,
+                x="section",
+                y="count",
+            )
         else:
-            st.info("섹션 통계 데이터가 없습니다.")
+            st.info(
+                "섹션 통계 데이터가 없습니다."
+            )
 
     st.write("**날짜별 수집 기사 수**")
 
     if daily_stats:
-        daily_df = pd.DataFrame(daily_stats)
-        st.line_chart(daily_df, x="date", y="count")
-    else:
-        st.info("날짜별 통계 데이터가 없습니다.")
+        daily_df = pd.DataFrame(
+            daily_stats
+        )
 
-    st.divider()
+        st.line_chart(
+            daily_df,
+            x="date",
+            y="count",
+        )
+    else:
+        st.info(
+            "날짜별 통계 데이터가 없습니다."
+        )
+
+
+def render_ai_assistant():
+    """
+    질문을 입력받아 키워드 추출, 기사 검색,
+    Ollama 답변 생성을 수행한다.
+    """
 
     st.subheader("🤖 AI 뉴스 비서")
 
+    st.caption(
+        "질문에서 핵심 키워드를 추출한 뒤 "
+        "SQLite에서 관련 기사를 찾아 답변합니다."
+    )
+
     question = st.text_input(
         "뉴스에 대해 질문해보세요",
-        placeholder="예: 반도체 뉴스 요약해줘",
+        placeholder=(
+            "예: 최근 반도체 시장 관련 "
+            "뉴스를 요약해줘"
+        ),
+        key="rag_question",
     )
 
     rag_limit = st.slider(
@@ -145,65 +230,123 @@ def main():
         max_value=10,
         value=5,
         step=1,
+        key="rag_limit",
     )
 
-    if st.button("AI에게 질문하기"):
+    if st.button(
+        "AI에게 질문하기",
+        key="rag_button",
+    ):
         if not question.strip():
             st.warning("질문을 입력해주세요.")
+
         else:
-            with st.spinner("관련 뉴스를 찾고 답변을 생성하는 중입니다..."):
+            with st.spinner(
+                "질문을 분석하고 관련 뉴스를 "
+                "찾는 중입니다..."
+            ):
                 result = answer_news_question(
                     question=question,
                     limit=rag_limit,
                 )
 
-            st.write("### 답변")
+            keywords = result.get(
+                "keywords",
+                [],
+            )
+
+            if keywords:
+                st.write("**추출된 검색 키워드**")
+                st.write(
+                    " · ".join(keywords)
+                )
+
+            st.write("### AI 답변")
             st.write(result["answer"])
 
             if result["articles"]:
                 st.write("### 참고 기사")
-                render_article_list(result["articles"])
 
-    st.divider()
+                render_article_list(
+                    result["articles"],
+                    show_relevance=True,
+                )
+
+
+def render_news_search():
+    """
+    키워드, 섹션, 언론사, 태그, 감정,
+    날짜 범위를 이용한 검색 화면이다.
+    """
 
     st.subheader("🔎 뉴스 검색")
 
     keyword = st.text_input(
         "검색어 입력",
-        placeholder="예: 반도체, AI, 환율, 삼성전자",
+        placeholder=(
+            "예: 반도체, AI, 환율, 삼성전자"
+        ),
+        key="search_keyword",
     )
 
     search_section = st.selectbox(
         "검색 섹션",
-        ["전체", "정치", "경제", "사회", "생활문화", "세계", "IT과학"],
+        [
+            "전체",
+            "정치",
+            "경제",
+            "사회",
+            "생활문화",
+            "세계",
+            "IT과학",
+        ],
+        key="search_section",
     )
 
-    press_options = ["전체"] + get_press_list()
+    press_options = (
+        ["전체"] + get_press_list()
+    )
 
     search_press = st.selectbox(
         "언론사",
         press_options,
+        key="search_press",
     )
 
-    tag_options = ["전체"] + get_tag_list()
+    tag_options = (
+        ["전체"] + get_tag_list()
+    )
 
     search_tag = st.selectbox(
         "태그",
         tag_options,
+        key="search_tag",
     )
 
     search_sentiment = st.selectbox(
         "분위기",
-        ["전체", "긍정", "중립", "부정"],
+        [
+            "전체",
+            "긍정",
+            "중립",
+            "부정",
+        ],
+        key="search_sentiment",
     )
 
     col_start, col_end = st.columns(2)
 
     with col_start:
-        start_date = st.date_input("검색 시작일")
+        start_date = st.date_input(
+            "검색 시작일",
+            key="search_start_date",
+        )
 
     with col_end:
-        end_date = st.date_input("검색 종료일")
+        end_date = st.date_input(
+            "검색 종료일",
+            key="search_end_date",
+        )
 
     search_limit = st.slider(
         "검색 결과 수",
@@ -211,11 +354,19 @@ def main():
         max_value=100,
         value=20,
         step=5,
+        key="search_limit",
     )
 
-    if st.button("검색"):
+    if st.button(
+        "검색",
+        key="search_button",
+    ):
         if start_date > end_date:
-            st.error("검색 시작일은 종료일보다 늦을 수 없습니다.")
+            st.error(
+                "검색 시작일은 종료일보다 "
+                "늦을 수 없습니다."
+            )
+
         else:
             results = search_articles(
                 keyword=keyword,
@@ -228,14 +379,22 @@ def main():
                 limit=search_limit,
             )
 
-            st.write(f"검색 결과: {len(results)}건")
+            st.write(
+                f"검색 결과: {len(results)}건"
+            )
 
             if not results:
-                st.info("검색 결과가 없습니다.")
+                st.info(
+                    "검색 결과가 없습니다."
+                )
             else:
                 render_article_list(results)
 
-    st.divider()
+
+def render_today_news():
+    """
+    오늘 SQLite에 저장된 기사들을 섹션별로 출력한다.
+    """
 
     st.subheader("🗂 오늘 뉴스 보기")
 
@@ -243,7 +402,16 @@ def main():
 
     today_section = st.selectbox(
         "오늘 뉴스 섹션 선택",
-        ["전체", "정치", "경제", "사회", "생활문화", "세계", "IT과학"],
+        [
+            "전체",
+            "정치",
+            "경제",
+            "사회",
+            "생활문화",
+            "세계",
+            "IT과학",
+        ],
+        key="today_section",
     )
 
     today_articles = search_articles(
@@ -257,15 +425,81 @@ def main():
         limit=100,
     )
 
-    st.write(f"표시 기사 수: {len(today_articles)}건")
+    st.write(
+        f"표시 기사 수: "
+        f"{len(today_articles)}건"
+    )
 
     if not today_articles:
         st.info(
             "오늘 날짜로 DB에 저장된 뉴스가 없습니다. "
-            "python main.py를 실행해서 SQLite 저장까지 완료했는지 확인하세요."
+            "python main.py를 실행해 주세요."
         )
     else:
         render_article_list(today_articles)
+
+
+def main():
+    st.set_page_config(
+        page_title="AI 뉴스 리포트",
+        page_icon="📰",
+        layout="wide",
+    )
+
+    st.title("📰 AI 뉴스 리포트 대시보드")
+
+    json_articles, path = (
+        load_today_news_json()
+    )
+
+    if not json_articles:
+        st.warning(
+            f"오늘 뉴스 JSON 파일을 "
+            f"찾지 못했습니다: {path}"
+        )
+        st.info(
+            "먼저 아래 명령어를 실행하세요."
+        )
+        st.code("python main.py")
+        return
+
+    df = pd.DataFrame(json_articles)
+
+    st.caption(
+        f"오늘 JSON 데이터 파일: {path}"
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.metric(
+            "오늘 수집 기사 수",
+            len(df),
+        )
+
+    with col2:
+        section_count = (
+            df["section"].nunique()
+            if "section" in df.columns
+            else 0
+        )
+
+        st.metric(
+            "오늘 섹션 수",
+            section_count,
+        )
+
+    st.divider()
+    render_statistics()
+
+    st.divider()
+    render_ai_assistant()
+
+    st.divider()
+    render_news_search()
+
+    st.divider()
+    render_today_news()
 
 
 if __name__ == "__main__":
