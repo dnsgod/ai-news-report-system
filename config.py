@@ -1,8 +1,15 @@
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL_NAME = "qwen2.5:3b"
 
+EMBEDDING_MODEL_NAME = (
+    "sentence-transformers/"
+    "paraphrase-multilingual-MiniLM-L12-v2"
+)
+
 RAW_DATA_DIR = "data/raw"
 REPORT_DIR = "reports"
+
+DB_PATH = "data/news.db"
 
 STOPWORDS = {
     "그리고", "하지만", "또한", "대한", "관련", "이번", "지난", "오늘",
@@ -24,4 +31,4 @@ TAG_RULES = {
     "기술": ["해킹", "보안", "통신", "우주", "양자", "반도체"],
 }
 
-DB_PATH = "data/news.db"
+
