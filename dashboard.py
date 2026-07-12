@@ -13,8 +13,12 @@ from services.db_service import (
     get_tag_list,
     search_articles,
 )
-from services.rag_service import answer_news_question
-from utils.file_utils import get_today_str
+from services.rag_service import (
+    answer_news_question,
+)
+from utils.file_utils import (
+    get_today_str,
+)
 
 
 def load_today_news_json():
@@ -23,7 +27,11 @@ def load_today_news_json():
     """
 
     date_str = get_today_str()
-    path = Path("data/raw") / f"naver_news_{date_str}.json"
+
+    path = (
+        Path("data/raw")
+        / f"naver_news_{date_str}.json"
+    )
 
     if not path.exists():
         return [], path
@@ -37,7 +45,7 @@ def load_today_news_json():
 
 def render_article_list(
     articles,
-    show_relevance=False,
+    show_hybrid_score=False,
 ):
     """
     기사 목록을 접었다 펼 수 있는 형태로 출력한다.
@@ -45,68 +53,108 @@ def render_article_list(
 
     for article in articles:
         title = article.get(
-            "title",
-            "제목 없음",
-        )
+            "title"
+        ) or "제목 없음"
+
         press = article.get(
-            "press",
-            "언론사 미확인",
-        )
+            "press"
+        ) or "언론사 미확인"
+
         section = article.get(
-            "section",
-            "기타",
-        )
+            "section"
+        ) or "기타"
+
         link = article.get(
-            "link",
-            "",
-        )
+            "link"
+        ) or ""
+
         content = article.get(
-            "content",
-            "",
-        )
+            "content"
+        ) or ""
+
         crawled_at = article.get(
-            "crawled_at",
-            "",
-        )
+            "crawled_at"
+        ) or ""
+
         sentiment = article.get(
-            "sentiment",
-            "",
-        )
+            "sentiment"
+        ) or ""
+
         tags = article.get(
-            "tags",
-            "",
+            "tags"
+        ) or ""
+
+        hybrid_score = article.get(
+            "hybrid_score",
+            0.0,
         )
-        relevance_score = article.get(
-            "relevance_score",
-            0,
+
+        keyword_score = article.get(
+            "normalized_keyword_score",
+            0.0,
+        )
+
+        vector_score = article.get(
+            "normalized_vector_score",
+            0.0,
+        )
+
+        retrieval_source = article.get(
+            "retrieval_source",
+            "",
         )
 
         with st.expander(
             f"[{section}] {title}"
         ):
-            st.write(f"**언론사:** {press}")
+            st.write(
+                f"**언론사:** {press}"
+            )
 
             if crawled_at:
                 st.write(
-                    f"**수집 시각:** {crawled_at}"
+                    f"**수집 시각:** "
+                    f"{crawled_at}"
                 )
 
             if sentiment:
                 st.write(
-                    f"**분위기:** {sentiment}"
+                    f"**분위기:** "
+                    f"{sentiment}"
                 )
             else:
-                st.write("**분위기:** 미분석")
+                st.write(
+                    "**분위기:** 미분석"
+                )
 
             if tags:
-                st.write(f"**태그:** {tags}")
-            else:
-                st.write("**태그:** 미분류")
-
-            if show_relevance:
                 st.write(
-                    f"**질문 관련도 점수:** "
-                    f"{relevance_score}"
+                    f"**태그:** {tags}"
+                )
+            else:
+                st.write(
+                    "**태그:** 미분류"
+                )
+
+            if show_hybrid_score:
+                st.write(
+                    f"**검색 방식:** "
+                    f"{retrieval_source}"
+                )
+
+                st.write(
+                    f"**하이브리드 점수:** "
+                    f"{hybrid_score:.4f}"
+                )
+
+                st.write(
+                    f"**키워드 점수:** "
+                    f"{keyword_score:.4f}"
+                )
+
+                st.write(
+                    f"**벡터 유사도:** "
+                    f"{vector_score:.4f}"
                 )
 
             if link:
@@ -116,15 +164,22 @@ def render_article_list(
                 )
 
             if content:
-                preview = content[:700].replace(
-                    "\n",
-                    " ",
+                preview = (
+                    content[:700]
+                    .replace("\n", " ")
                 )
 
-                st.write("**본문 미리보기**")
-                st.write(preview + "...")
+                st.write(
+                    "**본문 미리보기**"
+                )
+
+                st.write(
+                    preview + "..."
+                )
             else:
-                st.write("본문이 없습니다.")
+                st.write(
+                    "본문이 없습니다."
+                )
 
 
 def render_statistics():
@@ -132,17 +187,29 @@ def render_statistics():
     SQLite에 누적된 뉴스 통계를 출력한다.
     """
 
-    st.subheader("📊 누적 뉴스 통계")
-
-    press_stats = get_press_statistics(
-        limit=10,
-    )
-    section_stats = get_section_statistics()
-    daily_stats = get_daily_statistics(
-        limit=14,
+    st.subheader(
+        "📊 누적 뉴스 통계"
     )
 
-    col_press, col_section = st.columns(2)
+    press_stats = (
+        get_press_statistics(
+            limit=10,
+        )
+    )
+
+    section_stats = (
+        get_section_statistics()
+    )
+
+    daily_stats = (
+        get_daily_statistics(
+            limit=14,
+        )
+    )
+
+    col_press, col_section = (
+        st.columns(2)
+    )
 
     with col_press:
         st.write(
@@ -184,7 +251,9 @@ def render_statistics():
                 "섹션 통계 데이터가 없습니다."
             )
 
-    st.write("**날짜별 수집 기사 수**")
+    st.write(
+        "**날짜별 수집 기사 수**"
+    )
 
     if daily_stats:
         daily_df = pd.DataFrame(
@@ -204,22 +273,24 @@ def render_statistics():
 
 def render_ai_assistant():
     """
-    질문을 입력받아 키워드 추출, 기사 검색,
-    Ollama 답변 생성을 수행한다.
+    하이브리드 검색 기반 AI 뉴스 비서 화면이다.
     """
 
-    st.subheader("🤖 AI 뉴스 비서")
+    st.subheader(
+        "🤖 AI 뉴스 비서"
+    )
 
     st.caption(
-        "질문에서 핵심 키워드를 추출한 뒤 "
-        "SQLite에서 관련 기사를 찾아 답변합니다."
+        "질문에서 키워드를 추출하고, "
+        "SQLite 키워드 검색과 벡터 검색을 "
+        "결합해 관련 기사를 찾습니다."
     )
 
     question = st.text_input(
         "뉴스에 대해 질문해보세요",
         placeholder=(
-            "예: 최근 반도체 시장 관련 "
-            "뉴스를 요약해줘"
+            "예: 인공지능 산업 투자와 "
+            "관련된 소식을 정리해줘"
         ),
         key="rag_question",
     )
@@ -238,16 +309,20 @@ def render_ai_assistant():
         key="rag_button",
     ):
         if not question.strip():
-            st.warning("질문을 입력해주세요.")
+            st.warning(
+                "질문을 입력해주세요."
+            )
 
         else:
             with st.spinner(
-                "질문을 분석하고 관련 뉴스를 "
-                "찾는 중입니다..."
+                "키워드 검색과 벡터 검색을 "
+                "결합해 관련 뉴스를 찾는 중입니다..."
             ):
-                result = answer_news_question(
-                    question=question,
-                    limit=rag_limit,
+                result = (
+                    answer_news_question(
+                        question=question,
+                        limit=rag_limit,
+                    )
                 )
 
             keywords = result.get(
@@ -255,31 +330,51 @@ def render_ai_assistant():
                 [],
             )
 
+            search_type = result.get(
+                "search_type",
+                "",
+            )
+
             if keywords:
-                st.write("**추출된 검색 키워드**")
+                st.write(
+                    "**추출된 검색 키워드**"
+                )
+
                 st.write(
                     " · ".join(keywords)
                 )
 
+            if search_type:
+                st.write(
+                    f"**검색 방식:** "
+                    f"{search_type}"
+                )
+
             st.write("### AI 답변")
-            st.write(result["answer"])
+
+            st.write(
+                result["answer"]
+            )
 
             if result["articles"]:
-                st.write("### 참고 기사")
+                st.write(
+                    "### 참고 기사"
+                )
 
                 render_article_list(
                     result["articles"],
-                    show_relevance=True,
+                    show_hybrid_score=True,
                 )
 
 
 def render_news_search():
     """
-    키워드, 섹션, 언론사, 태그, 감정,
-    날짜 범위를 이용한 검색 화면이다.
+    일반 뉴스 조건 검색 화면이다.
     """
 
-    st.subheader("🔎 뉴스 검색")
+    st.subheader(
+        "🔎 뉴스 검색"
+    )
 
     keyword = st.text_input(
         "검색어 입력",
@@ -304,7 +399,8 @@ def render_news_search():
     )
 
     press_options = (
-        ["전체"] + get_press_list()
+        ["전체"]
+        + get_press_list()
     )
 
     search_press = st.selectbox(
@@ -314,7 +410,8 @@ def render_news_search():
     )
 
     tag_options = (
-        ["전체"] + get_tag_list()
+        ["전체"]
+        + get_tag_list()
     )
 
     search_tag = st.selectbox(
@@ -323,18 +420,22 @@ def render_news_search():
         key="search_tag",
     )
 
-    search_sentiment = st.selectbox(
-        "분위기",
-        [
-            "전체",
-            "긍정",
-            "중립",
-            "부정",
-        ],
-        key="search_sentiment",
+    search_sentiment = (
+        st.selectbox(
+            "분위기",
+            [
+                "전체",
+                "긍정",
+                "중립",
+                "부정",
+            ],
+            key="search_sentiment",
+        )
     )
 
-    col_start, col_end = st.columns(2)
+    col_start, col_end = (
+        st.columns(2)
+    )
 
     with col_start:
         start_date = st.date_input(
@@ -380,7 +481,8 @@ def render_news_search():
             )
 
             st.write(
-                f"검색 결과: {len(results)}건"
+                f"검색 결과: "
+                f"{len(results)}건"
             )
 
             if not results:
@@ -388,15 +490,19 @@ def render_news_search():
                     "검색 결과가 없습니다."
                 )
             else:
-                render_article_list(results)
+                render_article_list(
+                    results
+                )
 
 
 def render_today_news():
     """
-    오늘 SQLite에 저장된 기사들을 섹션별로 출력한다.
+    오늘 SQLite에 저장된 뉴스를 출력한다.
     """
 
-    st.subheader("🗂 오늘 뉴스 보기")
+    st.subheader(
+        "🗂 오늘 뉴스 보기"
+    )
 
     today = date.today()
 
@@ -414,15 +520,17 @@ def render_today_news():
         key="today_section",
     )
 
-    today_articles = search_articles(
-        keyword="",
-        section=today_section,
-        press="전체",
-        tag="전체",
-        sentiment="전체",
-        start_date=today,
-        end_date=today,
-        limit=100,
+    today_articles = (
+        search_articles(
+            keyword="",
+            section=today_section,
+            press="전체",
+            tag="전체",
+            sentiment="전체",
+            start_date=today,
+            end_date=today,
+            limit=100,
+        )
     )
 
     st.write(
@@ -432,11 +540,14 @@ def render_today_news():
 
     if not today_articles:
         st.info(
-            "오늘 날짜로 DB에 저장된 뉴스가 없습니다. "
+            "오늘 날짜로 DB에 저장된 "
+            "뉴스가 없습니다. "
             "python main.py를 실행해 주세요."
         )
     else:
-        render_article_list(today_articles)
+        render_article_list(
+            today_articles
+        )
 
 
 def main():
@@ -446,7 +557,9 @@ def main():
         layout="wide",
     )
 
-    st.title("📰 AI 뉴스 리포트 대시보드")
+    st.title(
+        "📰 AI 뉴스 리포트 대시보드"
+    )
 
     json_articles, path = (
         load_today_news_json()
@@ -457,13 +570,20 @@ def main():
             f"오늘 뉴스 JSON 파일을 "
             f"찾지 못했습니다: {path}"
         )
+
         st.info(
             "먼저 아래 명령어를 실행하세요."
         )
-        st.code("python main.py")
+
+        st.code(
+            "python main.py"
+        )
+
         return
 
-    df = pd.DataFrame(json_articles)
+    df = pd.DataFrame(
+        json_articles
+    )
 
     st.caption(
         f"오늘 JSON 데이터 파일: {path}"
