@@ -341,3 +341,59 @@ def get_tag_list():
                 tag_set.add(tag)
 
     return sorted(tag_set)
+
+def get_sentiment_statistics():
+    """
+    SQLite에 저장된 뉴스의 감정 분석 결과를 집계한다.
+    """
+
+    init_db()
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT sentiment, COUNT(*) AS count
+        FROM news_articles
+        WHERE sentiment IS NOT NULL
+          AND sentiment != ''
+        GROUP BY sentiment
+        ORDER BY count DESC
+        """
+    )
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    sentiment_counts = {
+        "긍정": 0,
+        "중립": 0,
+        "부정": 0,
+    }
+
+    for sentiment, count in rows:
+        if sentiment in sentiment_counts:
+            sentiment_counts[sentiment] = count
+
+    total = sum(sentiment_counts.values())
+
+    results = []
+
+    for sentiment in ["긍정", "중립", "부정"]:
+        count = sentiment_counts[sentiment]
+
+        if total > 0:
+            percentage = count / total * 100
+        else:
+            percentage = 0.0
+
+        results.append(
+            {
+                "sentiment": sentiment,
+                "count": count,
+                "percentage": percentage,
+            }
+        )
+
+    return results

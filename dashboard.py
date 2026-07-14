@@ -10,20 +10,17 @@ from services.db_service import (
     get_press_list,
     get_press_statistics,
     get_section_statistics,
+    get_sentiment_statistics,
     get_tag_list,
     search_articles,
 )
-from services.rag_service import (
-    answer_news_question,
-)
-from utils.file_utils import (
-    get_today_str,
-)
+from services.rag_service import answer_news_question
+from utils.file_utils import get_today_str
 
 
 def load_today_news_json():
     """
-    오늘 날짜의 원본 JSON 뉴스 파일을 읽는다.
+    오늘 날짜의 원본 뉴스 JSON 파일을 읽는다.
     """
 
     date_str = get_today_str()
@@ -52,37 +49,26 @@ def render_article_list(
     """
 
     for article in articles:
-        title = article.get(
-            "title"
-        ) or "제목 없음"
+        title = (
+            article.get("title")
+            or "제목 없음"
+        )
 
-        press = article.get(
-            "press"
-        ) or "언론사 미확인"
+        press = (
+            article.get("press")
+            or "언론사 미확인"
+        )
 
-        section = article.get(
-            "section"
-        ) or "기타"
+        section = (
+            article.get("section")
+            or "기타"
+        )
 
-        link = article.get(
-            "link"
-        ) or ""
-
-        content = article.get(
-            "content"
-        ) or ""
-
-        crawled_at = article.get(
-            "crawled_at"
-        ) or ""
-
-        sentiment = article.get(
-            "sentiment"
-        ) or ""
-
-        tags = article.get(
-            "tags"
-        ) or ""
+        link = article.get("link") or ""
+        content = article.get("content") or ""
+        crawled_at = article.get("crawled_at") or ""
+        sentiment = article.get("sentiment") or ""
+        tags = article.get("tags") or ""
 
         hybrid_score = article.get(
             "hybrid_score",
@@ -113,14 +99,12 @@ def render_article_list(
 
             if crawled_at:
                 st.write(
-                    f"**수집 시각:** "
-                    f"{crawled_at}"
+                    f"**수집 시각:** {crawled_at}"
                 )
 
             if sentiment:
                 st.write(
-                    f"**분위기:** "
-                    f"{sentiment}"
+                    f"**분위기:** {sentiment}"
                 )
             else:
                 st.write(
@@ -182,6 +166,119 @@ def render_article_list(
                 )
 
 
+def render_sentiment_statistics():
+    """
+    SQLite에 저장된 감정 분석 결과를 집계하여 표시한다.
+    """
+
+    st.write(
+        "### 😊 뉴스 감정 분석 현황"
+    )
+
+    sentiment_stats = (
+        get_sentiment_statistics()
+    )
+
+    if not sentiment_stats:
+        st.info(
+            "감정 분석 통계 데이터가 없습니다."
+        )
+        return
+
+    sentiment_map = {
+        item["sentiment"]: item
+        for item in sentiment_stats
+    }
+
+    positive = sentiment_map.get(
+        "긍정",
+        {
+            "count": 0,
+            "percentage": 0.0,
+        },
+    )
+
+    neutral = sentiment_map.get(
+        "중립",
+        {
+            "count": 0,
+            "percentage": 0.0,
+        },
+    )
+
+    negative = sentiment_map.get(
+        "부정",
+        {
+            "count": 0,
+            "percentage": 0.0,
+        },
+    )
+
+    total_count = (
+        positive["count"]
+        + neutral["count"]
+        + negative["count"]
+    )
+
+    col_total, col_positive, col_neutral, col_negative = (
+        st.columns(4)
+    )
+
+    with col_total:
+        st.metric(
+            "분석 기사",
+            f"{total_count}건",
+        )
+
+    with col_positive:
+        st.metric(
+            "긍정",
+            f"{positive['count']}건",
+            f"{positive['percentage']:.1f}%",
+        )
+
+    with col_neutral:
+        st.metric(
+            "중립",
+            f"{neutral['count']}건",
+            f"{neutral['percentage']:.1f}%",
+        )
+
+    with col_negative:
+        st.metric(
+            "부정",
+            f"{negative['count']}건",
+            f"{negative['percentage']:.1f}%",
+        )
+
+    sentiment_df = pd.DataFrame(
+        sentiment_stats
+    )
+
+    st.bar_chart(
+        sentiment_df,
+        x="sentiment",
+        y="count",
+    )
+
+    dominant_sentiment = max(
+        sentiment_stats,
+        key=lambda item: item["count"],
+    )
+
+    if total_count == 0:
+        st.info(
+            "아직 감정 분석이 완료된 기사가 없습니다."
+        )
+    else:
+        st.caption(
+            f"현재 가장 많은 감정 유형은 "
+            f"'{dominant_sentiment['sentiment']}'이며, "
+            f"전체의 "
+            f"{dominant_sentiment['percentage']:.1f}%입니다."
+        )
+
+
 def render_statistics():
     """
     SQLite에 누적된 뉴스 통계를 출력한다.
@@ -191,20 +288,16 @@ def render_statistics():
         "📊 누적 뉴스 통계"
     )
 
-    press_stats = (
-        get_press_statistics(
-            limit=10,
-        )
+    press_stats = get_press_statistics(
+        limit=10,
     )
 
     section_stats = (
         get_section_statistics()
     )
 
-    daily_stats = (
-        get_daily_statistics(
-            limit=14,
-        )
+    daily_stats = get_daily_statistics(
+        limit=14,
     )
 
     col_press, col_section = (
@@ -270,6 +363,10 @@ def render_statistics():
             "날짜별 통계 데이터가 없습니다."
         )
 
+    st.divider()
+
+    render_sentiment_statistics()
+
 
 def render_ai_assistant():
     """
@@ -318,11 +415,9 @@ def render_ai_assistant():
                 "키워드 검색과 벡터 검색을 "
                 "결합해 관련 뉴스를 찾는 중입니다..."
             ):
-                result = (
-                    answer_news_question(
-                        question=question,
-                        limit=rag_limit,
-                    )
+                result = answer_news_question(
+                    question=question,
+                    limit=rag_limit,
                 )
 
             keywords = result.get(
@@ -350,7 +445,9 @@ def render_ai_assistant():
                     f"{search_type}"
                 )
 
-            st.write("### AI 답변")
+            st.write(
+                "### AI 답변"
+            )
 
             st.write(
                 result["answer"]
@@ -369,7 +466,7 @@ def render_ai_assistant():
 
 def render_news_search():
     """
-    일반 뉴스 조건 검색 화면이다.
+    뉴스 조건 검색 화면이다.
     """
 
     st.subheader(
@@ -420,17 +517,15 @@ def render_news_search():
         key="search_tag",
     )
 
-    search_sentiment = (
-        st.selectbox(
-            "분위기",
-            [
-                "전체",
-                "긍정",
-                "중립",
-                "부정",
-            ],
-            key="search_sentiment",
-        )
+    search_sentiment = st.selectbox(
+        "분위기",
+        [
+            "전체",
+            "긍정",
+            "중립",
+            "부정",
+        ],
+        key="search_sentiment",
     )
 
     col_start, col_end = (
@@ -520,17 +615,15 @@ def render_today_news():
         key="today_section",
     )
 
-    today_articles = (
-        search_articles(
-            keyword="",
-            section=today_section,
-            press="전체",
-            tag="전체",
-            sentiment="전체",
-            start_date=today,
-            end_date=today,
-            limit=100,
-        )
+    today_articles = search_articles(
+        keyword="",
+        section=today_section,
+        press="전체",
+        tag="전체",
+        sentiment="전체",
+        start_date=today,
+        end_date=today,
+        limit=100,
     )
 
     st.write(
