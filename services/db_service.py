@@ -397,3 +397,68 @@ def get_sentiment_statistics():
         )
 
     return results
+
+def get_tag_statistics(limit=10):
+    """
+    SQLite에 저장된 태그를 분리하고 등장 횟수를 집계한다.
+
+    tags 저장 예시:
+    "AI,반도체,기술"
+    """
+
+    init_db()
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT tags
+        FROM news_articles
+        WHERE tags IS NOT NULL
+          AND tags != ''
+        """
+    )
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    tag_counts = {}
+
+    for row in rows:
+        tag_text = row[0] or ""
+
+        for tag in tag_text.split(","):
+            tag = tag.strip()
+
+            if not tag:
+                continue
+
+            tag_counts[tag] = tag_counts.get(tag, 0) + 1
+
+    sorted_tags = sorted(
+        tag_counts.items(),
+        key=lambda item: item[1],
+        reverse=True,
+    )
+
+    top_tags = sorted_tags[:limit]
+    total_count = sum(tag_counts.values())
+
+    results = []
+
+    for tag, count in top_tags:
+        if total_count > 0:
+            percentage = count / total_count * 100
+        else:
+            percentage = 0.0
+
+        results.append(
+            {
+                "tag": tag,
+                "count": count,
+                "percentage": percentage,
+            }
+        )
+
+    return results

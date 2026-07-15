@@ -12,10 +12,29 @@ from services.db_service import (
     get_section_statistics,
     get_sentiment_statistics,
     get_tag_list,
+    get_tag_statistics,
     search_articles,
 )
 from services.rag_service import answer_news_question
 from utils.file_utils import get_today_str
+
+
+SECTION_OPTIONS = [
+    "전체",
+    "정치",
+    "경제",
+    "사회",
+    "생활문화",
+    "세계",
+    "IT과학",
+]
+
+SENTIMENT_OPTIONS = [
+    "전체",
+    "긍정",
+    "중립",
+    "부정",
+]
 
 
 def load_today_news_json():
@@ -37,7 +56,9 @@ def load_today_news_json():
         "r",
         encoding="utf-8",
     ) as file:
-        return json.load(file), path
+        articles = json.load(file)
+
+    return articles, path
 
 
 def render_article_list(
@@ -45,7 +66,7 @@ def render_article_list(
     show_hybrid_score=False,
 ):
     """
-    기사 목록을 접었다 펼 수 있는 형태로 출력한다.
+    기사 목록을 Streamlit expander 형태로 출력한다.
     """
 
     for article in articles:
@@ -168,7 +189,7 @@ def render_article_list(
 
 def render_sentiment_statistics():
     """
-    SQLite에 저장된 감정 분석 결과를 집계하여 표시한다.
+    SQLite의 감정 분석 결과를 집계하여 표시한다.
     """
 
     st.write(
@@ -220,9 +241,12 @@ def render_sentiment_statistics():
         + negative["count"]
     )
 
-    col_total, col_positive, col_neutral, col_negative = (
-        st.columns(4)
-    )
+    (
+        col_total,
+        col_positive,
+        col_neutral,
+        col_negative,
+    ) = st.columns(4)
 
     with col_total:
         st.metric(
@@ -261,32 +285,113 @@ def render_sentiment_statistics():
         y="count",
     )
 
-    dominant_sentiment = max(
-        sentiment_stats,
-        key=lambda item: item["count"],
-    )
+    if total_count > 0:
+        dominant_sentiment = max(
+            sentiment_stats,
+            key=lambda item: item["count"],
+        )
 
-    if total_count == 0:
+        st.caption(
+            f"가장 많은 감정 유형은 "
+            f"'{dominant_sentiment['sentiment']}'이며, "
+            f"전체 분석 기사의 "
+            f"{dominant_sentiment['percentage']:.1f}%입니다."
+        )
+    else:
         st.info(
             "아직 감정 분석이 완료된 기사가 없습니다."
         )
-    else:
-        st.caption(
-            f"현재 가장 많은 감정 유형은 "
-            f"'{dominant_sentiment['sentiment']}'이며, "
-            f"전체의 "
-            f"{dominant_sentiment['percentage']:.1f}%입니다."
+
+
+def render_tag_statistics():
+    """
+    SQLite에 저장된 태그를 집계하여 TOP10을 표시한다.
+    """
+
+    st.write(
+        "### 🏷️ 주요 뉴스 태그 TOP 10"
+    )
+
+    tag_stats = get_tag_statistics(
+        limit=10,
+    )
+
+    if not tag_stats:
+        st.info(
+            "태그 통계 데이터가 없습니다."
+        )
+        return
+
+    top_tag = tag_stats[0]
+
+    total_top10_count = sum(
+        item["count"]
+        for item in tag_stats
+    )
+
+    col_top_tag, col_tag_count = (
+        st.columns(2)
+    )
+
+    with col_top_tag:
+        st.metric(
+            "가장 많이 등장한 태그",
+            top_tag["tag"],
+            f"{top_tag['count']}회",
         )
 
+    with col_tag_count:
+        st.metric(
+            "TOP10 태그 등장 횟수",
+            f"{total_top10_count}회",
+        )
 
-def render_statistics():
-    """
-    SQLite에 누적된 뉴스 통계를 출력한다.
-    """
-
-    st.subheader(
-        "📊 누적 뉴스 통계"
+    tag_df = pd.DataFrame(
+        tag_stats
     )
+
+    st.bar_chart(
+        tag_df,
+        x="tag",
+        y="count",
+    )
+
+    st.write(
+        "**태그별 상세 통계**"
+    )
+
+    display_df = tag_df.copy()
+
+    display_df["percentage"] = (
+        display_df["percentage"]
+        .map(lambda value: f"{value:.1f}%")
+    )
+
+    display_df = display_df.rename(
+        columns={
+            "tag": "태그",
+            "count": "등장 횟수",
+            "percentage": "전체 태그 비율",
+        }
+    )
+
+    st.dataframe(
+        display_df,
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    st.caption(
+        f"현재 가장 많이 등장한 태그는 "
+        f"'{top_tag['tag']}'이며 "
+        f"총 {top_tag['count']}회 등장했습니다."
+    )
+
+
+def render_basic_statistics():
+    """
+    언론사, 섹션, 날짜별 통계를 출력한다.
+    """
 
     press_stats = get_press_statistics(
         limit=10,
@@ -363,9 +468,29 @@ def render_statistics():
             "날짜별 통계 데이터가 없습니다."
         )
 
+
+def render_statistics():
+    """
+    누적 뉴스 통계 화면 전체를 출력한다.
+    """
+
+    st.subheader(
+        "📊 누적 뉴스 통계"
+    )
+
+    render_basic_statistics()
+
     st.divider()
 
-    render_sentiment_statistics()
+    col_sentiment, col_tag = (
+        st.columns(2)
+    )
+
+    with col_sentiment:
+        render_sentiment_statistics()
+
+    with col_tag:
+        render_tag_statistics()
 
 
 def render_ai_assistant():
@@ -409,59 +534,58 @@ def render_ai_assistant():
             st.warning(
                 "질문을 입력해주세요."
             )
+            return
 
-        else:
-            with st.spinner(
-                "키워드 검색과 벡터 검색을 "
-                "결합해 관련 뉴스를 찾는 중입니다..."
-            ):
-                result = answer_news_question(
-                    question=question,
-                    limit=rag_limit,
-                )
-
-            keywords = result.get(
-                "keywords",
-                [],
+        with st.spinner(
+            "키워드 검색과 벡터 검색을 "
+            "결합해 관련 뉴스를 찾는 중입니다..."
+        ):
+            result = answer_news_question(
+                question=question,
+                limit=rag_limit,
             )
 
-            search_type = result.get(
-                "search_type",
-                "",
-            )
+        keywords = result.get(
+            "keywords",
+            [],
+        )
 
-            if keywords:
-                st.write(
-                    "**추출된 검색 키워드**"
-                )
+        search_type = result.get(
+            "search_type",
+            "",
+        )
 
-                st.write(
-                    " · ".join(keywords)
-                )
-
-            if search_type:
-                st.write(
-                    f"**검색 방식:** "
-                    f"{search_type}"
-                )
-
+        if keywords:
             st.write(
-                "### AI 답변"
+                "**추출된 검색 키워드**"
             )
 
             st.write(
-                result["answer"]
+                " · ".join(keywords)
             )
 
-            if result["articles"]:
-                st.write(
-                    "### 참고 기사"
-                )
+        if search_type:
+            st.write(
+                f"**검색 방식:** {search_type}"
+            )
 
-                render_article_list(
-                    result["articles"],
-                    show_hybrid_score=True,
-                )
+        st.write(
+            "### AI 답변"
+        )
+
+        st.write(
+            result["answer"]
+        )
+
+        if result["articles"]:
+            st.write(
+                "### 참고 기사"
+            )
+
+            render_article_list(
+                result["articles"],
+                show_hybrid_score=True,
+            )
 
 
 def render_news_search():
@@ -483,15 +607,7 @@ def render_news_search():
 
     search_section = st.selectbox(
         "검색 섹션",
-        [
-            "전체",
-            "정치",
-            "경제",
-            "사회",
-            "생활문화",
-            "세계",
-            "IT과학",
-        ],
+        SECTION_OPTIONS,
         key="search_section",
     )
 
@@ -519,12 +635,7 @@ def render_news_search():
 
     search_sentiment = st.selectbox(
         "분위기",
-        [
-            "전체",
-            "긍정",
-            "중립",
-            "부정",
-        ],
+        SENTIMENT_OPTIONS,
         key="search_sentiment",
     )
 
@@ -562,32 +673,32 @@ def render_news_search():
                 "검색 시작일은 종료일보다 "
                 "늦을 수 없습니다."
             )
+            return
 
+        results = search_articles(
+            keyword=keyword,
+            section=search_section,
+            press=search_press,
+            tag=search_tag,
+            sentiment=search_sentiment,
+            start_date=start_date,
+            end_date=end_date,
+            limit=search_limit,
+        )
+
+        st.write(
+            f"검색 결과: "
+            f"{len(results)}건"
+        )
+
+        if not results:
+            st.info(
+                "검색 결과가 없습니다."
+            )
         else:
-            results = search_articles(
-                keyword=keyword,
-                section=search_section,
-                press=search_press,
-                tag=search_tag,
-                sentiment=search_sentiment,
-                start_date=start_date,
-                end_date=end_date,
-                limit=search_limit,
+            render_article_list(
+                results
             )
-
-            st.write(
-                f"검색 결과: "
-                f"{len(results)}건"
-            )
-
-            if not results:
-                st.info(
-                    "검색 결과가 없습니다."
-                )
-            else:
-                render_article_list(
-                    results
-                )
 
 
 def render_today_news():
@@ -603,15 +714,7 @@ def render_today_news():
 
     today_section = st.selectbox(
         "오늘 뉴스 섹션 선택",
-        [
-            "전체",
-            "정치",
-            "경제",
-            "사회",
-            "생활문화",
-            "세계",
-            "IT과학",
-        ],
+        SECTION_OPTIONS,
         key="today_section",
     )
 
@@ -640,6 +743,43 @@ def render_today_news():
     else:
         render_article_list(
             today_articles
+        )
+
+
+def render_header_metrics(
+    json_articles,
+    path,
+):
+    """
+    상단 기본 정보와 오늘 수집 현황을 출력한다.
+    """
+
+    df = pd.DataFrame(
+        json_articles
+    )
+
+    st.caption(
+        f"오늘 JSON 데이터 파일: {path}"
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.metric(
+            "오늘 수집 기사 수",
+            len(df),
+        )
+
+    with col2:
+        section_count = (
+            df["section"].nunique()
+            if "section" in df.columns
+            else 0
+        )
+
+        st.metric(
+            "오늘 섹션 수",
+            section_count,
         )
 
 
@@ -674,33 +814,10 @@ def main():
 
         return
 
-    df = pd.DataFrame(
-        json_articles
+    render_header_metrics(
+        json_articles=json_articles,
+        path=path,
     )
-
-    st.caption(
-        f"오늘 JSON 데이터 파일: {path}"
-    )
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.metric(
-            "오늘 수집 기사 수",
-            len(df),
-        )
-
-    with col2:
-        section_count = (
-            df["section"].nunique()
-            if "section" in df.columns
-            else 0
-        )
-
-        st.metric(
-            "오늘 섹션 수",
-            section_count,
-        )
 
     st.divider()
     render_statistics()
